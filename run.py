@@ -55,6 +55,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--character", help="Sadece bu karakteri seç (caption.character)")
     p.add_argument("--face-target", type=int, default=0,
                    help="Min N adet face.visible=true (swap ile)")
+    p.add_argument("--recursive", action="store_true", default=False,
+                   help="Source dataset alt klasörlerini de tara (tree-preserving copy)")
+    p.add_argument("--no-recursive", action="store_false", dest="recursive",
+                   help="Sadece source kökündeki dosyalar (default)")
     p.add_argument("--force", action="store_true",
                    help="Hedef klasör doluysa üzerine yaz")
     p.add_argument("--dry-run", action="store_true",
@@ -83,6 +87,16 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.undo:
+        # Conventions §3: undo modunda diğer akış flag'leri çakışır
+        conflict = [n for n, v in [
+            ("-i/--input", args.input),
+            ("-o/--output", args.output),
+            ("--report", args.report),
+            ("--count", args.count),
+            ("--distribution", args.distribution),
+        ] if v]
+        if conflict:
+            parser.error(f"--undo ile birlikte kullanılamaz: {', '.join(conflict)}")
         return _run_undo(Path(args.undo))
 
     # Required arg checks
@@ -114,7 +128,7 @@ def main() -> int:
     print(f"\n{'='*70}")
     print("Media Golden Set")
     print(f"{'='*70}")
-    print(f"Source:       {src}")
+    print(f"Source:       {src}{' (recursive)' if args.recursive else ''}")
     print(f"Output:       {out}")
     print(f"Report:       {rep}")
     print(f"Count:        {args.count}")
@@ -133,6 +147,7 @@ def main() -> int:
         distribution=distribution,
         character=args.character,
         face_target=args.face_target,
+        recursive=args.recursive,
     )
     if not selection.selected:
         print("Seçim sonucu boş — filter sonrası asset kalmadı.", file=sys.stderr)
@@ -147,6 +162,7 @@ def main() -> int:
         apply_result = apply_selection(
             selection.selected,
             target_dir=out,
+            source_root=src if args.recursive else None,
             force=args.force,
             dry_run=args.dry_run,
         )
@@ -166,6 +182,7 @@ def main() -> int:
         "distribution": distribution,
         "character": args.character,
         "face_target": args.face_target,
+        "recursive": args.recursive,
         "force": args.force,
         "dry_run": args.dry_run,
         "input": str(src.resolve()),

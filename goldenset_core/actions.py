@@ -33,27 +33,42 @@ def apply_selection(
     selection: Iterable[Asset],
     *,
     target_dir: Path | str,
+    source_root: Path | str | None = None,
     force: bool = False,
     dry_run: bool = False,
 ) -> ApplyResult:
     """
     Seçimi target_dir'e kopyala. Caption JSON varsa onu da kopyala.
 
+    - source_root verilirse: tree-preserving (`relative_to(source_root)` mirror).
+      Verilmezse: flat (`target_dir / filename`) — geriye dönük uyumlu davranış.
     - force=False ve target dolu ise FileExistsError
     - dry_run=True kopyalama yapmaz, sadece liste döndürür
     """
     target = Path(target_dir)
+    src_root = Path(source_root).resolve() if source_root else None
     if target.exists() and any(target.iterdir()) and not force and not dry_run:
         raise FileExistsError(f"Target {target} not empty. Use force=True to overwrite.")
     if not dry_run:
         target.mkdir(parents=True, exist_ok=True)
 
+    def _dst_for(src: Path) -> Path:
+        if src_root is None:
+            return target / src.name
+        try:
+            rel = src.resolve().relative_to(src_root)
+            return target / rel
+        except ValueError:
+            # source_root altında değilse flat fallback
+            return target / src.name
+
     result = ApplyResult()
     for asset in selection:
         src_img = asset.path
-        dst_img = target / asset.filename
+        dst_img = _dst_for(src_img)
         if not dry_run:
             try:
+                dst_img.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src_img, dst_img)
             except OSError as e:
                 result.errors.append(f"{src_img}: {e}")
@@ -66,9 +81,10 @@ def apply_selection(
         # Caption JSON varsa
         src_cap = src_img.with_suffix(".json")
         if src_cap.exists():
-            dst_cap = target / src_cap.name
+            dst_cap = _dst_for(src_cap)
             if not dry_run:
                 try:
+                    dst_cap.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src_cap, dst_cap)
                 except OSError as e:
                     result.errors.append(f"{src_cap}: {e}")

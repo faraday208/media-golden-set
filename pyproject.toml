@@ -1,6 +1,6 @@
 [project]
 name = "media-golden-set"
-version = "1.0.0"
+version = "1.0.1"
 description = "Quality + caption-aware cherry-pick for AI training golden sets"
 requires-python = ">=3.11"
 readme = "README.md"

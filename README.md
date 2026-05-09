@@ -224,11 +224,18 @@ uv run pytest
 - `--undo` selective değil; raporda listelenen tüm `dst` dosyalarını siler
 - Bucket inference deterministic ama caption JSON kalitesine bağımlı (Pass 4 = scene/camera tipik kaynak)
 - `--character` strict eşleşme (case-insensitive); fuzzy matching yok
-- Recursive scan yok — sadece source klasörün direkt içindeki dosyalar
+- Recursive scan opt-in (`--recursive` flag); default sadece source kökü
+- Recursive mode'da target tree mirror edilir; flat mode'da `target/<filename>` (geriye uyumlu)
 
 ---
 
 ## 🏷️ Sürüm
+
+**v1.0.1** — pipeline integrasyonu için cross-tool tutarlılık iyileştirmeleri:
+- **Recursive scan** — `--recursive`/`--no-recursive` flag (default: False, geriye uyumlu). Pipeline 06 caption tree-aware sidecar pattern üretiyorsa, 07 artık alt klasörleri görebiliyor.
+- **Tree-preserving copy** — `--recursive` aktifken `apply_selection` `relative_to(source_root)` ile target altında subdir hiyerarşisini mirror'lar; aynı isimli farklı subdir'lerdeki dosyalar collision'sız kopyalanır.
+- **`--undo` çakışma guard'ı** — `--undo` ile `-i/-o/--report/--count/--distribution` birlikte verilirse `parser.error` (resize/watermark/caption ile UX tutarlı).
+- +4 regression test (39 toplam): recursive scan, tree-preserve copy, flat fallback, undo conflict.
 
 **v1.0.0** — clean release. `golden-set-generator` → `media-golden-set`. Convention §uyumlu refactor:
 - Gradio `ui/app.py` (101 satır) silindi — review işi meta UI'da

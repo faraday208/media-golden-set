@@ -101,9 +101,18 @@ def _is_valid(report_entry: dict) -> bool:
 
 # ---------- Loading ----------
 
-def load_data(source_dir: Path | str, report_path: Path | str) -> list[Asset]:
-    """Quality raporu + source dir scan → Asset list."""
-    source_dir = Path(source_dir)
+def load_data(
+    source_dir: Path | str,
+    report_path: Path | str,
+    *,
+    recursive: bool = False,
+) -> list[Asset]:
+    """Quality raporu + source dir scan → Asset list.
+
+    recursive=True: alt klasörleri de tara (rglob).
+    Quality raporu hem 'filename' hem 'path' anahtarlarıyla eşleşmeyi destekler;
+    aynı isimli dosyalar farklı alt klasörlerdeyse 'path' tercih edilir."""
+    source_dir = Path(source_dir).resolve()
     report_path = Path(report_path)
 
     with open(report_path, "r", encoding="utf-8") as f:
@@ -112,16 +121,29 @@ def load_data(source_dir: Path | str, report_path: Path | str) -> list[Asset]:
     if isinstance(report_data, dict) and "results" in report_data:
         report_data = report_data["results"]
 
+    # İki map: path-based (öncelik) ve filename-based (fallback)
+    path_map: dict[str, dict] = {}
+    name_map: dict[str, dict] = {}
     if isinstance(report_data, list):
-        report_map = {item.get("filename"): item for item in report_data if item.get("filename")}
+        for item in report_data:
+            if not isinstance(item, dict):
+                continue
+            p = item.get("path")
+            if p:
+                path_map[str(Path(p).resolve())] = item
+            fn = item.get("filename")
+            if fn:
+                name_map.setdefault(fn, item)
     else:
-        report_map = report_data
+        # Dict-shaped (filename-keyed) — fallback
+        name_map = dict(report_data) if isinstance(report_data, dict) else {}
 
+    iterator = source_dir.rglob("*") if recursive else source_dir.iterdir()
     assets: list[Asset] = []
-    for fp in source_dir.iterdir():
-        if fp.suffix.lower() not in VALID_EXTS:
+    for fp in iterator:
+        if not fp.is_file() or fp.suffix.lower() not in VALID_EXTS:
             continue
-        entry = report_map.get(fp.name) or report_map.get(fp.stem)
+        entry = path_map.get(str(fp.resolve())) or name_map.get(fp.name) or name_map.get(fp.stem)
         if not entry:
             continue
         caption: dict = {}
@@ -179,9 +201,10 @@ def select(
     distribution: dict[str, float],
     character: Optional[str] = None,
     face_target: int = 0,
+    recursive: bool = False,
 ) -> SelectionResult:
     """Asıl seçim mantığı — kopyalama yapmaz, sadece SelectionResult döndürür."""
-    raw = load_data(source, report)
+    raw = load_data(source, report, recursive=recursive)
     filtered = filter_assets(raw, character)
     if not filtered:
         return SelectionResult([], {}, {}, {}, 0.0, 0)

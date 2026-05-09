@@ -379,3 +379,79 @@ def test_run_missing_required_flags(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["run.py", "-i", "/x"])
     with pytest.raises(SystemExit):
         main()
+
+
+def test_load_data_recursive_finds_subdirs(tmp_path: Path):
+    """recursive=True alt klasörlerdeki görselleri bulmalı."""
+    sub = tmp_path / "subdir"
+    sub.mkdir()
+    # Top-level + sub
+    for parent, name in [(tmp_path, "top.png"), (sub, "deep.png")]:
+        (parent / name).write_bytes(b"\x89PNG\r\n\x1a\n")
+        (parent / name).with_suffix(".json").write_text(json.dumps({
+            "camera": {"distance": "close-up"},
+            "face": {"visible": "true"},
+        }))
+    (tmp_path / "rep.json").write_text(json.dumps({
+        "results": [
+            {"filename": "top.png", "valid": True, "blur": {"score": 0.9}},
+            {"filename": "deep.png", "valid": True, "blur": {"score": 0.8}},
+        ]
+    }))
+
+    flat = load_data(tmp_path, tmp_path / "rep.json", recursive=False)
+    assert len(flat) == 1  # sadece top.png
+    rec = load_data(tmp_path, tmp_path / "rep.json", recursive=True)
+    assert len(rec) == 2
+
+
+def test_apply_selection_tree_preserving(tmp_path: Path):
+    """source_root verilirse subdir mirror edilmeli."""
+    src_root = tmp_path / "src"
+    sub = src_root / "tatil-2024"
+    sub.mkdir(parents=True)
+    (sub / "img.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (sub / "img.json").write_text(json.dumps({
+        "camera": {"distance": "close-up"},
+        "face": {"visible": "true"},
+    }))
+
+    asset = type("A", (), {})()
+    asset.path = sub / "img.png"
+    asset.filename = "img.png"
+
+    target = tmp_path / "golden"
+    ar = apply_selection([asset], target_dir=target, source_root=src_root)
+    # Subdir mirror edildi
+    assert (target / "tatil-2024" / "img.png").exists()
+    assert (target / "tatil-2024" / "img.json").exists()
+    # Flat değil
+    assert not (target / "img.png").exists()
+
+
+def test_apply_selection_flat_when_no_source_root(tmp_path: Path):
+    """source_root=None geriye dönük uyumlu (flat) davranış."""
+    src_root = tmp_path / "src"
+    sub = src_root / "deep"
+    sub.mkdir(parents=True)
+    (sub / "x.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    asset = type("A", (), {})()
+    asset.path = sub / "x.png"
+    asset.filename = "x.png"
+
+    target = tmp_path / "golden"
+    apply_selection([asset], target_dir=target)
+    assert (target / "x.png").exists()  # flat
+
+
+def test_run_undo_rejects_conflicting_flags(monkeypatch, tmp_path: Path):
+    """--undo ile -i/-o/--report birlikte verilirse parser.error (UX
+    tutarlılığı: resize+watermark+caption hepsi aynı davranır)."""
+    from run import main
+    monkeypatch.setattr(sys, "argv", [
+        "run.py", "--undo", str(tmp_path / "rep.json"),
+        "-i", "/some/dataset",
+    ])
+    with pytest.raises(SystemExit):
+        main()
