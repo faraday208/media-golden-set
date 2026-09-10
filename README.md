@@ -13,6 +13,33 @@
 
 ---
 
+## English
+
+**What it does.** Quality- and caption-aware cherry-picker that assembles a balanced "golden set" for AI training. It reads blur scores from the quality report and bucket / face-visible data from the caption JSONs, then selects a distribution-balanced subset.
+
+**Install**
+
+```bash
+git clone https://github.com/faraday208/media-golden-set
+cd media-golden-set
+uv sync
+```
+
+**Basic usage**
+
+```bash
+uv run python run.py \
+    -i ./dataset \
+    -o ./golden-set \
+    --report ./dataset/quality_report.json \
+    --count 200 \
+    --distribution close-up:30,upper-body:30,full-body:40
+```
+
+Step **07** of the [`media-dataset-prep`](https://github.com/faraday208/media-dataset-prep) pipeline; also works standalone. The detailed documentation below is in Turkish.
+
+---
+
 ## 🎯 Ne yapıyor?
 
 Görseller + caption JSON'lar + quality_report verildiğinde:
